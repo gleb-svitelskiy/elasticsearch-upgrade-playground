@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+#MISE description="Create Elasticsearch v6 cluster"
+set -euo pipefail
+
+ES_RUNNING_SERVICES=$(docker compose ps --all --services | grep '^es' || true)
+ES6_SERVICES=$(docker compose config --services | grep '^es6-')
+
+if [ -n "${ES_RUNNING_SERVICES}" ]; then
+    set -x
+    docker compose down --volumes $ES_RUNNING_SERVICES
+    { set +x; } 2>/dev/null
+fi
+
+set -x
+docker compose up --wait --detach $ES6_SERVICES

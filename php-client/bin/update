@@ -1,0 +1,22 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+require_once dirname(__DIR__) . '/vendor/autoload.php';
+
+use App\Config;
+use App\ElasticsearchClientFactory;
+
+define('INDEX', Config::get('INDEX'));
+const SEARCH_RESULT_SIZE = 1000;
+$es = ElasticsearchClientFactory::create(Config::getArray('ELASTICSEARCH_HOSTS'));
+
+$res = $es->search([
+    'index' => INDEX,
+    'body' => [
+        'query' => ['match_all' => new \stdClass()],
+        'sort' => ['created_at' => 'asc'],
+        'size' => SEARCH_RESULT_SIZE,
+        '_source' => false,
+    ],
+]);
+var_dump($res);

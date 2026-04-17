@@ -1,0 +1,26 @@
+services:
+
+  es7-node1: &es7-node
+    extends:
+      service: es-node1
+      file: common.yaml
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.29
+    container_name: es7-node1
+    environment:
+      discovery.seed_hosts: es-node1,es-node2,es-node3
+      # xpack.security.enabled: "true"
+      # cluster.initial_master_nodes cluster.initial_master_nodes
+
+  es7-node2:
+    <<: *es7-node
+    extends:
+      service: es-node2
+      file: common.yaml
+    container_name: es7-node2
+
+  es7-node3:
+    <<: *es7-node
+    extends:
+      service: es-node3
+      file: common.yaml
+    container_name: es7-node3

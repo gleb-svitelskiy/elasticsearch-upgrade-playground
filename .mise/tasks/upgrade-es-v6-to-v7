@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+upgrade_node() {
+    local master_service="$MASTER_SERVICE"
+    local node_name="$1"
+    local es_version_current=$(
+        docker compose exec "$master_service" \
+            curl --silent --show-error --fail "http://$node_name:9200" |
+        jq -r '.version | .number'
+    )
+    local service_current=$(node_to_service "$node_name" "$es_version_current")
+    local service_new=$(node_to_service "$node_name" "7.0.0")
+    local es_version_new=$(docker compose config "$service_new" --images | sed 's/.*://')
+
+    # validate Elasticsearch version for upgrade
+    local es_major_version es_minor_version es_patch_version
+    IFS='.' read -r es_major_version es_minor_version es_patch_version <<< "$es_version_current"
+    if ! (( es_major_version > 6 || (es_major_version == 6 && es_minor_version >= 8) )); then
+        echo "Node $node_name is running Elasticsearch $es_version_current. Upgrade to $es_version_new requires at least 6.8.0." >&2
+        return 1
+    fi
+    if (( es_major_version >= 7 )); then
+        echo "Node $node_name is already running Elasticsearch $es_version_current. No upgrade needed." >&2
+        return 0
+    fi
+    echo "Node $node_name is running Elasticsearch $es_version_current upgrading to $es_version_new" >&2
+
+    local number_of_nodes_in_cluster=$(
+        docker compose exec "$master_service" \
+            curl --silent --show-error --fail "http://localhost:9200/_cluster/health?wait_for_status=green" |
+        jq -r '.number_of_nodes'
+    )
+
+    set -x
+    docker compose exec "$master_service" \
+        curl --silent --show-error --fail \
+            --request PUT "http://localhost:9200/_cluster/settings" \
+            --header 'Content-Type: application/json' \
+            --data '{"persistent": {"cluster.routing.allocation.enable": "primaries"}}' |
+        jq
+
+    docker compose exec "$master_service" \
+        curl --silent --show-error \
+            --request POST "http://localhost:9200/_flush/synced" |
+        jq
+
+    docker compose stop --timeout -1 "$service_current"
+
+    docker compose up --wait --detach "$service_new"
+
+    { set +x; } 2>/dev/null
+    if [[ "$service_current" == "$master_service" ]]; then
+        master_service="$service_new"
+    fi
+    set -x
+
+    docker compose exec "$master_service" \
+        curl --silent --show-error --fail \
+            "http://localhost:9200/_cluster/health?wait_for_nodes=$number_of_nodes_in_cluster" |
+        jq
+
+    docker compose exec "$master_service" \
+        curl --silent --show-error --fail \
+            --request PUT "http://localhost:9200/_cluster/settings" \
+            --header 'Content-Type: application/json' \
+            --data '{"persistent": {"cluster.routing.allocation.enable": null}}' |
+        jq
+
+    docker compose exec "$master_service" \
+        curl --silent --show-error --fail \
+            "http://localhost:9200/_cluster/health?wait_for_status=green" |
+        jq
+    { set +x; } 2>/dev/null
+}
+
+node_to_service() {
+    local node_name="$1"
+    local version="$2"
+
+    [[ "$node_name" == es-node* ]] || {
+        echo "Invalid node name: $node_name" >&2
+        return 1
+    }
+
+    # validate semantic version: X.Y.Z
+    [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+        echo "Invalid version: $version" >&2
+        return 1
+    }
+
+    local major_version="${version%%.*}"
+    echo "es${major_version}-${node_name#es-}"
+}
+
+get_es_cluster_master_service() {
+    # Get ES running services
+    local -a es_services
+    mapfile -t es_services < <(docker compose ps --services | grep '^es')
+    if [ ${#es_services[@]} -eq 0 ]; then
+        echo 'No ES services are running' >&2
+        exit 1
+    fi
+
+    # Check cluster health status
+    local cluster_health=$(
+        docker compose exec "${es_services[0]}" \
+            curl --silent --show-error --fail http://localhost:9200/_cluster/health
+    )
+    local cluster_status=$(echo "$cluster_health" | jq -r '.status')
+    if [[ "$cluster_status" != "green" ]]; then
+        echo "Cluster status is $cluster_status" >&2
+        exit 1
+    fi
+    echo "Cluster status: $cluster_status" >&2
+
+    # Check number of nodes
+    local number_of_nodes=$(echo "$cluster_health" | jq -r '.number_of_nodes')
+    if [[ "$number_of_nodes" -ne ${#es_services[@]} ]]; then
+        echo "Number of nodes ($number_of_nodes) not equals to number of ES docker services (${#es_services[@]})" >&2
+        exit 1
+    fi
+    echo "Number of nodes: $number_of_nodes" >&2
+
+    # Identify the master node
+    local master_node_info=$(
+        docker compose exec "${es_services[0]}" \
+            curl --silent --show-error --fail http://localhost:9200/_nodes/_master/_none
+    )
+    if [[ $(echo "$master_node_info" | jq -r '._nodes.successful') -ne 1 ]]; then
+        echo "The master node could not be identified" >&2
+        exit 1
+    fi
+    local master_node=$(echo "$master_node_info" | jq -r '.nodes[] | .name')
+    local master_node_es_version=$(echo "$master_node_info" | jq -r '.nodes[] | .version')
+    local master_service=$(node_to_service "$master_node" "$master_node_es_version")
+    echo "Master node: $master_node (Doker service: $master_service)" >&2
+
+    echo "$master_service"
+}
+
+MASTER_SERVICE=$(get_es_cluster_master_service)
+MASTER_NODE=$(
+    docker compose exec "$MASTER_SERVICE" \
+        curl --silent --show-error --fail http://localhost:9200/_nodes/_master/_none |
+    jq -r '.nodes[] | .name'
+)
+
+# Upgrade nodes that are not master-eligible first
+master_ineligible_nodes=$(
+    docker compose exec "$MASTER_SERVICE" \
+        curl --silent --show-error --fail http://localhost:9200/_nodes/_all,master:false/_none |
+    jq -r '.nodes[] | .name'
+)
+if [[ -n "$master_ineligible_nodes" ]]; then
+    echo "Upgrading nodes that are not master-eligible"
+fi
+for node in $master_ineligible_nodes; do
+    echo "Upgrading node $node"
+    upgrade_node "$node"
+done
+
+# Upgrade the master-eligible nodes (except currently-elected master node)
+master_eligible_nodes=$(
+    docker compose exec "$MASTER_SERVICE" \
+        curl --silent --show-error --fail http://localhost:9200/_nodes/master:true/_none |
+    jq -r --arg master_node "$MASTER_NODE" '
+        .nodes[] | select(.name != $master_node) | .name
+    '
+)
+if [[ -n "$master_eligible_nodes" ]]; then
+    echo "Upgrading the master-eligible nodes"
+fi
+for node in $master_eligible_nodes; do
+    echo "Upgrading node $node"
+    upgrade_node "$node"
+done
+
+# Upgrade currently-elected master node (to avoid multiple master elections)
+echo "Upgrading master node $MASTER_NODE"
+upgrade_node "$MASTER_NODE"

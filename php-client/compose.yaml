@@ -1,0 +1,40 @@
+services:
+
+  php-client-index:
+    build:
+      context: .
+    init: true
+    environment:
+      ELASTICSEARCH_HOSTS: http://34.116.148.152:9201,http://34.116.148.152:9202,http://34.116.148.152:9203
+    command:
+      - 'bin/console'
+      - 'document:index'
+      - '--index=test'
+      - '--number-of-shards=3'
+      - '--number-of-replicas=2'
+      - '--iteration-sleep=500000'
+    volumes:
+      - ./bin:/srv/app/bin
+      - ./src:/srv/app/src
+      - ./vendor:/srv/app/vendor
+
+  php-client-update:
+    extends:
+      service: php-client-index
+    command:
+      - 'bin/console'
+      - 'document:update'
+
+  php-client-get:
+    extends:
+      service: php-client-index
+    command:
+      - 'bin/console'
+      - 'document:get'
+
+  php-client-search:
+    extends:
+      service: php-client-index
+    command:
+      - 'bin/console'
+      - 'document:search'
