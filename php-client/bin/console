@@ -1,0 +1,19 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+require_once dirname(__DIR__) . '/vendor/autoload.php';
+
+use App\Command\GetCommand;
+use App\Command\IndexCommand;
+use App\Command\SearchCommand;
+use App\Command\UpdateCommand;
+use Symfony\Component\Console\Application;
+
+$application = new Application('PHP Elasticsearch client', '0.1');
+$application->addCommands([
+    new GetCommand(),
+    new IndexCommand(),
+    new SearchCommand(),
+    new UpdateCommand(),
+]);
+$application->run();

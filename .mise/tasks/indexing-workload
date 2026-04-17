@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+#MISE description="Run indexing workload"
+#USAGE flag "-s --connection-pool-strategy <strategy>" help="Connection pool strategy for Elasticsearch client (default: static-with-ping)" default="static-with-ping" {
+#USAGE   choices "static-with-ping" "static-no-ping" "sniffing"
+#USAGE }
+
+set -euo pipefail
+set -x
+
+docker compose run --rm php-client-index \
+    --index=test --number-of-shards=3 --number-of-replicas=2 \
+    --pause-between-operations=0.2 --connection-pool-strategy="${usage_connection_pool_strategy:?}"

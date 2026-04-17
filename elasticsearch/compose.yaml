@@ -1,0 +1,8 @@
+include:
+  - v6.yaml
+  - v7.yaml
+
+volumes:
+  es-node1-data:
+  es-node2-data:
+  es-node3-data:

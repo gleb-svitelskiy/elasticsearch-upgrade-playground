@@ -1,0 +1,26 @@
+services:
+
+  es6-node1: &es6-node
+    extends:
+      service: es-node1
+      file: common.yaml
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.8.23
+    container_name: es6-node1
+    environment:
+      discovery.zen.ping.unicast.hosts: es-node1,es-node2,es-node3
+      discovery.zen.minimum_master_nodes: 2 # (master_eligible_nodes / 2) + 1
+      # bootstrap.system_call_filter: "false" # unable to install syscall filter on ARM
+
+  es6-node2:
+    <<: *es6-node
+    extends:
+      service: es-node2
+      file: common.yaml
+    container_name: es6-node2
+
+  es6-node3:
+    <<: *es6-node
+    extends:
+      service: es-node3
+      file: common.yaml
+    container_name: es6-node3

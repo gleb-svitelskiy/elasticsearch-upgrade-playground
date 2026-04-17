@@ -1,0 +1,24 @@
+services:
+
+  php-client-index:
+    build:
+      context: .
+    init: true
+    environment:
+      ELASTICSEARCH_HOSTS: ${ELASTICSEARCH_HOSTS:-http://es-node1:9200,http://es-node2:9200,http://es-node3:9200}
+    entrypoint: [bin/console, document:index]
+
+  php-client-update:
+    extends:
+      service: php-client-index
+    entrypoint: [bin/console, document:update]
+
+  php-client-get:
+    extends:
+      service: php-client-index
+    entrypoint: [bin/console, document:get]
+
+  php-client-search:
+    extends:
+      service: php-client-index
+    entrypoint: [bin/console, document:search]

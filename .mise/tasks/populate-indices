@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+
+#MISE description="Populate Elasticsearch indices with datasets"
+#USAGE flag "-h --target-host <host:port>" help="Target Elasticsearch host where data will be indexed (default: es-node1:9200)" default="es-node1:9200"
+#USAGE flag "-d --dataset <name>" help="Dataset to use for populating indices (default: geonames)" default="geonames" {
+#USAGE   choices "geonames" "http_logs"
+#USAGE }
+#USAGE flag "-i --ingest-percentage <int>" help="Percentage of documents to ingest (default: 100)" default="100"
+#USAGE flag "-s --number-of-shards <int>" help="(default: 5)" default="5"
+#USAGE flag "-r --number-of-replicas <int>" help="(default: 1)" default="1"
+
+set -euo pipefail
+set -x
+
+docker compose run --rm rally \
+    race \
+    --pipeline=benchmark-only \
+    --target-hosts="${usage_target_host:?}" \
+    --track="${usage_dataset:?}" \
+    --challenge=append-no-conflicts-index-only \
+    --track-params="ingest_percentage:${usage_ingest_percentage:?},number_of_shards:${usage_number_of_shards:?},number_of_replicas:${usage_number_of_replicas:?}"

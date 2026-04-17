@@ -1,0 +1,57 @@
+services:
+
+  es-node1:
+    mem_limit: 2g
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65535
+        hard: 65535
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      default:
+        aliases:
+          - es-node1
+    ports:
+      - "9201:9200"
+    volumes:
+      - es-node1-data:/usr/share/elasticsearch/data:rw
+    environment:
+      cluster.name: test-cluster
+      node.name: es-node1
+      network.host: 0.0.0.0
+      ES_JAVA_OPTS: "-Xms1g -Xmx1g" # Set Xms and Xmx to no more than 50% of your physical RAM, to ensure that there is enough physical RAM left for kernel file system caches.
+      bootstrap.memory_lock: "true"
+      # logger.org.elasticsearch.discovery: DEBUG
+
+  es-node2:
+    extends: es-node1
+    networks:
+      default:
+        aliases: !override
+          - es-node2
+    ports: !override
+      - "9202:9200"
+    volumes:
+      - es-node2-data:/usr/share/elasticsearch/data:rw
+    environment:
+      node.name: es-node2
+
+  es-node3:
+    extends: es-node1
+    networks:
+      default:
+        aliases: !override
+          - es-node3
+    ports: !override
+      - "9203:9200"
+    volumes:
+      - es-node3-data:/usr/share/elasticsearch/data:rw
+    environment:
+      node.name: es-node3

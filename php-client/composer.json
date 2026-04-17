@@ -1,0 +1,21 @@
+{
+    "type": "project",
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\Unit\\": "tests/unit/"
+        }
+    },
+    "require": {
+        "elasticsearch/elasticsearch": "^6.8",
+        "symfony/console": "^8.0",
+        "symfony/stopwatch": "^8.0"
+    },
+    "require-dev": {
+        "symfony/var-dumper": "^8.0"
+    }
+}

@@ -1,0 +1,14 @@
+services:
+  php:
+    extends:
+      file: compose.yaml
+      service: php-client-index
+    build:
+      target: development
+    entrypoint: !reset null
+    volumes:
+      - ./:/srv/app
+  composer:
+    image: composer:lts
+    volumes:
+      - ./:/app
